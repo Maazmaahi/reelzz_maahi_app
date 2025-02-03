@@ -1,16 +1,66 @@
-import { View, Text, StyleSheet, Animated } from 'react-native';
-import React, { FC, useEffect, useState } from 'react';
-import { Colors } from '../../constants/Colors';
+import {View, Text, StyleSheet, Animated, Alert} from 'react-native';
+import React, {FC, useEffect, useState} from 'react';
+import {Colors} from '../../constants/Colors';
 import Logo from '../../assets/images/logo_t.png';
-import { useAppDispatch } from '../../redux/reduxHook';
-import { FONTS } from '../../constants/Fonts';
+import {useAppDispatch} from '../../redux/reduxHook';
+import {FONTS} from '../../constants/Fonts';
 import CustomText from '../../components/global/CustomText';
+import {token_storage} from '../../redux/storage';
+import {jwtDecode} from 'jwt-decode';
+import {navigate, resetAndNavigate} from '../../utils/NavigationUtil';
+import {refresh_tokens} from '../../redux/apiConfig';
+import {refetchUser} from '../../redux/actions/userAction';
+import {RoutesName} from '../../constants/RoutesName';
 
+interface DecodedToken {
+  exp: number;
+}
 
-const SplashScreen:FC = () => {
+const SplashScreen: FC = () => {
   const [isStop, setIsStop] = useState(false);
   const scale = new Animated.Value(1);
   const dispatch = useAppDispatch();
+
+  const tokenCheck = async () => {
+    const access_token = token_storage.getString('access_token') as string;
+    const refresh_token = token_storage.getString('refresh_token') as string;
+
+    if (access_token) {
+      const decodedAccessToken = jwtDecode<DecodedToken>(access_token);
+      const decodedRefreshToken = jwtDecode<DecodedToken>(refresh_token);
+
+      const currentTime = Date.now() / 1000;
+
+      if (decodedRefreshToken?.exp < currentTime) {
+        resetAndNavigate('LoginScreen');
+        Alert.alert('Session Expired, please login again');
+        return false;
+      }
+
+      if (decodedAccessToken?.exp < currentTime) {
+        try {
+          refresh_tokens();
+          dispatch(refetchUser());
+        } catch (error) {
+          console.log(error);
+          Alert.alert('There was an error');
+          return false;
+        }
+      }
+      resetAndNavigate('BottomTab');
+      return true;
+    }
+    resetAndNavigate('LoginScreen');
+    return false;
+  };
+
+  useEffect(()=>{
+    async function deeplinks() {
+      tokenCheck();
+    }
+
+    deeplinks();
+  });
 
   useEffect(() => {
     const breathingAnimation = Animated.loop(
@@ -36,7 +86,7 @@ const SplashScreen:FC = () => {
       breathingAnimation.stop();
     };
   }, [isStop]);
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
@@ -55,7 +105,7 @@ const SplashScreen:FC = () => {
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
